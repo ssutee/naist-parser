@@ -1,0 +1,159 @@
+#!/usr/bin/python2.5
+#-*- coding:utf8 -*-
+
+from naist_parser.naist_parser import *
+
+def parse_file(input_file,options):
+    if options.input_type not in ['pos','cut','raw']:
+        opt_parser.error('invalid input type, please choose ["pos","cut","raw"]')
+
+    parser = NAISTParser(
+                    model_file=options.model_file,
+                    label_model_file=options.label_model_file,
+                    dig_file=options.dig_file,
+                    dict_file=options.dict_file,
+                    pos_file=options.pos_file,
+                    model_type=options.type,
+                    type=options.input_type,
+                    k_best=options.k_best,
+                    bad_allow=options.bad_allow,
+                    bias=options.bias,
+                    multi_results=options.enable_multiple_results,
+                    lang_model=options.enable_lang_model)
+
+    for text in open(input_file).readlines():   
+        text = text.strip()
+        if text == '': 
+            continue
+
+        if options.input_type == 'pos' and options.dig_file == None and options.type == 'maxent':
+            result = parser.parse_basic_tagged_text(
+                text,
+                format=options.pos_style)
+        elif options.input_type == 'pos' and options.dig_file == None and options.type == 'mira':
+            W,T = ['<root>'],['<root-POS>']
+            for token in text.split():
+                p = token.rfind('/')
+                w,t = token[:p],token[p+1:]
+                if t == 'npn':
+                    W.append('<npn>')
+                else:
+                    W.append(encode_number(w))
+                T.append(t)
+            F = parser.mira_model._create_F(W,T)
+            Sc = parser.mira_model._create_Sc(W,T,F,parser.mira_model.v)
+            result = ''
+            deps = parser.parse_mira_tagged_text(
+                text,
+                Sc,
+                k_best=options.k_best,
+                format=options.pos_style)
+            for dep in deps:
+                result += parser._decode_deps(dep) + '\n'
+        elif options.input_type == 'pos' and options.dig_file != None:
+            result = parser.parse_tagged_text(
+                text,
+                k_best=options.k_best)
+        elif options.input_type == 'cut':
+            result = parser.parse_untagged_text(
+                text,
+                k_best=options.k_best)
+        elif options.input_type == 'raw':
+            result = parser.parse_raw_text(
+                text,
+                k_best=options.k_best)
+        print result.strip(),'\n'
+
+
+def check_data():
+    from distutils.sysconfig import get_python_lib
+
+    data_files = [
+        'deps.model.txt',
+        'deps.label.model.txt',
+        'deps.dig',
+        'thai.dict',
+        'thai-t3.ngram',
+        'thai-t3.lex',
+    ]
+
+    if os.path.exists(os.path.join(get_python_lib(0,0,'/usr/local'),'naist_parser','data')):
+        for file in data_files:
+            if not os.path.exists(os.path.join(get_python_lib(0,0,'/usr/local'),'naist_parser','data',file)):
+                return False
+    elif os.path.exists('./data'):
+        for file in data_files:
+            if not os.path.exists(os.path.join('./data',file)):
+                return False
+    else:
+        return False
+
+    return True
+
+
+
+if __name__ == '__main__':
+    from optparse import OptionParser
+    from distutils.sysconfig import get_python_lib
+
+    usage = 'usage: %prog [option] inputfile'
+    opt_parser = OptionParser(usage)
+
+    data_prefix = ''
+    if not check_data():
+        opt_parser.error('Some necessary files are missing, please reinstall the program again')
+    elif os.path.exists('./data'):
+        data_prefix = './data'
+    elif os.path.exists(os.path.join(get_python_lib(0,0,'/usr/local'),'naist_parser','data')):
+        data_prefix = os.path.join(get_python_lib(0,0,'/usr/local'),'naist_parser','data')
+
+
+    opt_parser.add_option('-t','--type',metavar='str',default='maxent',dest='type',
+        help='a type of the parsing model ["mira" or "maxent"]\
+        (default is "maxent")')
+    opt_parser.add_option('-k','--k_best',type='int',metavar='int',default=1,dest='k_best',
+        help='a number of parsing results (default is 1)')
+    opt_parser.add_option('-b','--bad-allow',type='int',metavar='int',default=0,dest='bad_allow',
+        help='a number of bad dependencies that allow to occur\
+        in a parse tree')
+    opt_parser.add_option('--input-type',metavar='str',default='pos',dest='input_type',
+        help='a type of input file ["pos","cut" or "raw"]')
+    opt_parser.add_option('--pos-style',metavar='str',default='naist',dest='pos_style',
+        help='a style of POS tagging ["naist"=(word/pos) or \
+        "acopost"=(word pos)] (default is "naist")')
+    opt_parser.add_option('--dig-file',metavar='file',dest='dig_file',
+        default=os.path.join(data_prefix,'deps.dig'),
+        help='the file that contains DIGs')
+    opt_parser.add_option('--model-file',metavar='file',dest='model_file',
+        default=os.path.join(data_prefix,'deps.model.txt'),
+        help='the parsing model file')
+    opt_parser.add_option('--label-model-file',metavar='file',dest='label_model_file',
+        default=os.path.join(data_prefix,'deps.label.model.txt'),
+        help='the grammatical function labeling model file')
+    opt_parser.add_option('--enable-lang-model',action='store_true',default=False,
+        dest='enable_lang_model',
+        help='use language model for sorting parsing results')
+    opt_parser.add_option('--enable-multiple-results',action='store_true',default=False,
+        dest='enable_multiple_results',
+        help='generate all k best results (default is False)')
+    opt_parser.add_option('--dict-file',metavar='file',dest='dict_file',
+        default=os.path.join(data_prefix,'thai.dict'),
+        help='a word list file used for segmenting a sentence')
+    opt_parser.add_option('--pos-file',metavar='file',dest='pos_file',
+        default=os.path.join(data_prefix,'thai.dict'),
+        help='a dictionary file that contains mapping words into\
+        its part-of-speeches')
+    opt_parser.add_option('--bias',metavar='float',type='float',default=0.1,dest='bias',
+        help='a penalty score for bad dependencies in a term of\
+        log(bias)')
+
+    options, args = opt_parser.parse_args()
+
+    if len(args) == 0:
+        opt_parser.error('no input file')
+
+    if options.type == 'mira':
+        opt_parser.error('MIRA model is not yet implemented, please use MAXENT model instead.')
+
+    parse_file(args[0],options)
+
