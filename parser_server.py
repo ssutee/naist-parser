@@ -14,32 +14,34 @@ parser = NAISTParser(
     model_file=os.path.join(PARSER_PATH,'naist_parser/data/deps.model.txt'),
     label_model_file=os.path.join(PARSER_PATH,'naist_parser/data/deps.label.model.txt'))
 
-def traverse(node, nodes=[], deps=[]):
-    n = [(node['snode'][0]['s'], node['snode'][0]['e']), node['snode'][0]['text'], node['pos']]
-    nodes.append(n)
+def traverse(node, nodes=[]):
+    nodes.append([(node['snode'][0]['s'], node['snode'][0]['e']), node['snode'][0]['text'], node['pos']])
     for child in node['children']:
-        c = [(child['snode'][0]['s'], child['snode'][0]['e']), child['snode'][0]['text'], child['pos']]
-        deps.append((n,c))
-        traverse(child, nodes, deps)
+        traverse(child, nodes)
     nodes.sort()
-    return nodes, deps
+    return nodes
 
 def parse_sstc(json_input):
     json_obj = json.loads(json_input)
     root = json_obj['sstc']['tree'][0]
-    nodes, deps = traverse(root, [])
-    return ' '.join(map(lambda x: x[1]+'/'+x[2], nodes)), map(lambda x:x[0], nodes), map(lambda x:(x[0][0],x[1][0]), deps)
+    nodes = traverse(root, [])
+    return ' '.join(map(lambda x: x[1]+'/'+x[2], nodes)), map(lambda x:x[0], nodes)
 
-def parse_diff_nodes(json_input):
+def parse_fixed_deps(json_input):
     json_obj = json.loads(json_input)
-    diff_nodes = map(lambda x:tuple(map(int, x['id'].split('-'))) ,json_obj['differences'])
-    diff_nodes.sort()
-    return diff_nodes
+    fixed_deps = []
+    for dep in json_obj['differences']:
+        node = tuple(map(int, dep['id'].split('-')))
+        if dep['parent'] != 'root':
+            fixed_deps.append((tuple(map(int, dep['parent'].split('-'))), node))
+        else:
+            fixed_deps.append(('root', node))
+    return fixed_deps
 
 def process_json_input(json_input):
-    text, nodes, deps = parse_sstc(json_input)
-    diff_nodes = parse_diff_nodes(json_input)
-    fixed_deps = filter(lambda x: x[0] in diff_nodes and x[1] in diff_nodes, deps)
+    text, nodes = parse_sstc(json_input)
+    nodes.insert(0,'root')
+    fixed_deps = parse_fixed_deps(json_input)
     fixed_deps = map(lambda x: (nodes.index(x[0]), nodes.index(x[1])), fixed_deps)
     return text, fixed_deps
 
