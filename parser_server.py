@@ -2,14 +2,17 @@
 
 from naist_parser.naist_parser import NAISTParser
 import json, codecs
+import os, os.path
 
 from flask import Flask, request
 app = Flask(__name__)
 
+PARSER_PATH = '/home/sutee/naist-parser'
+
 parser = NAISTParser(
-    dig_file='./naist_parser/data/deps.dig',
-    model_file='./naist_parser/data/deps.model.txt',
-    label_model_file='./naist_parser/data/deps.label.model.txt')
+    dig_file=os.path.join(PARSER_PATH,'naist_parser/data/deps.dig'),
+    model_file=os.path.join(PARSER_PATH,'naist_parser/data/deps.model.txt'),
+    label_model_file=os.path.join(PARSER_PATH,'naist_parser/data/deps.label.model.txt'))
 
 def traverse(node, nodes=[], deps=[]):
     n = [(node['snode'][0]['s'], node['snode'][0]['e']), node['snode'][0]['text'], node['pos']]
@@ -36,8 +39,7 @@ def parse_diff_nodes(json_input):
 def process_json_input(json_input):
     text, nodes, deps = parse_sstc(json_input)
     diff_nodes = parse_diff_nodes(json_input)
-    fixed_nodes = filter(lambda x: x not in diff_nodes, nodes)
-    fixed_deps = filter(lambda x: x[0] in fixed_nodes and x[1] in fixed_nodes, deps)
+    fixed_deps = filter(lambda x: x[0] in diff_nodes and x[1] in diff_nodes, deps)
     fixed_deps = map(lambda x: (nodes.index(x[0]), nodes.index(x[1])), fixed_deps)
     return text, fixed_deps
 
@@ -47,12 +49,6 @@ def parse():
     text, fixed_deps = process_json_input(json_input)
     result = parser.parse_tagged_text(text.encode('cp874', 'ignore'), fixed_deps=fixed_deps)
     return json.dumps({'result':result.decode('cp874')})
-
-#def main():
-#    json_input = codecs.open('test2.json', 'r', 'utf8').read()
-#    text, fixed_deps = process_json_input(json_input)
-#    result = parser.parse_tagged_text(text.encode('cp874', 'ignore'), fixed_deps=fixed_deps)
-#    print result.decode('cp874')
 
 if __name__ == '__main__':
     app.run()
