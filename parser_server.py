@@ -49,9 +49,6 @@ def process_json_input(json_input):
 def parse():
     json_input = request.form['data']
     text, fixed_deps = process_json_input(json_input)
-    print 'fixed_deps'
-    print text
-    print fixed_deps
     result = parser.parse_tagged_text(text.encode('cp874', 'ignore'), fixed_deps=fixed_deps)
     return json.dumps({'result':result.decode('cp874')})
 
