@@ -333,8 +333,6 @@ class NAISTParser:
         else:
             tokens = self.units
 
-        #print s,t,tokens[s][0],tokens[s][1],tokens[t][0],tokens[t][1]
-        
         txt = ' '.join(map(lambda x:'%s/%s'%(x[0],x[1]), tokens))
         pkey = md5.new('%d:%s:%s:%d'%(s,arrow,txt,t)).digest()
 
@@ -494,6 +492,8 @@ class NAISTParser:
                                         p_st = 0
                                         if self.T[t] not in self.roots:
                                             p_st = bias
+                                        if (s,t) in fixed_deps:
+                                            p_st = 9999
 
                                         trace = '%d:%s-s>%d:%s'%(s,cs[2][2],t,ct[2][2])
                                         trace = '%d,%d-%d,%d:>:0:(%.2f)'%(s,r,q,t,score)
@@ -515,17 +515,19 @@ class NAISTParser:
                                         key1,key2 = '>-c-%s-R'%(t_t),'<-a-%s-L'%(t_s)
                                         dep = cs[1] + ct[1]
                                         # compute dependencies prob
-                                        if self.model_type == 'maxent':
+                                        if (s,t) not in fixed_deps and self.model_type == 'maxent':
                                             p_st = self._get_deps_prob(\
                                                 s,t,'R',\
                                                 dep+[(s,'',t)],\
                                                 '->',p_mem,b_table,mode=mode)
 
-                                        elif self.model_type == 'mira':
+                                        elif (s,t) not in fixed_deps and self.model_type == 'mira':
                                             p_st = self._get_mira_score(\
-                                                s,t,'R',\
-                                                dep+[(s,'',t)],\
-                                                '->',p_mem,b_table,mode=mode)
+                                                 s,t,'R',\
+                                                 dep+[(s,'',t)],\
+                                                 '->',p_mem,b_table,mode=mode)
+                                        elif (s,t) in fixed_deps:
+                                            p_st = 9999
 
                                         ## For adjunct, don't have to collect attached key.
                                         ## Because, the Einser'algorithm doesn't allow multiple parent
@@ -596,16 +598,19 @@ class NAISTParser:
                                         dep = cs[1] + ct[1]
                                         key1,key2 = '>-c-%s-L'%(t_s),'<-a-%s-R'%(t_t)
 
-                                        if self.model_type == 'maxent':
+                                        if (t,s) not in fixed_deps and self.model_type == 'maxent':
                                             p_ts = self._get_deps_prob(
                                                 s,t,'L',\
                                                 dep+[(t,'',s)],\
                                                 '<-',p_mem,b_table,mode=mode)
-                                        elif self.model_type == 'mira':
+                                        elif (t,s) not in fixed_deps and self.model_type == 'mira':
                                             p_ts = self._get_mira_score(
                                                 s,t,'L',\
                                                 dep+[(t,'',s)],\
                                                 '<-',p_mem,b_table,mode=mode)
+                                        elif (t,s) in fixed_deps:
+                                            p_ts = 9999
+
 
                                         r1,id1 = ct[2][0].search_key('1',key1,attached,ct[2][2])
                                         r2,id2 = ct[2][0].search_key('3',key1,attached,ct[2][2])
@@ -675,7 +680,7 @@ class NAISTParser:
 
                 #print s,t,'R',C[s][t]['>'][0][0][0]
                 #print ''
-                
+
                 # part 3
                 otmp,d_tmp = [],[]
                 for r in range(s,t,1):
@@ -703,7 +708,7 @@ class NAISTParser:
                         self._filter_by_badness(otmp,bad_allow),k_best)
                 elif mode == 'normal':
                     C[s][t]['<'][1] = self._filter_by_badness(otmp,bad_allow)
-                                        
+
                 # part 4
                 otmp,d_tmp = [],[]
                 for r in range(s+1,t+1,1):
@@ -832,6 +837,7 @@ class NAISTParser:
 
                 C[s][t]['>'][0] = otmp1
                 C[s][t]['<'][0] = otmp2
+
                 #print s,t,C[s][t]['>'][0][0][0]
                 #print ''
 
